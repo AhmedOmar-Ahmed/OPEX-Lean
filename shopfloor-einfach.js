@@ -94,6 +94,7 @@
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("change", onChange, true);
     startMenuCard();
+    startSideMenu();
     injectCss();
 
     /* falls die Einstellungen gerade offen sind: neu zeichnen */
@@ -234,7 +235,22 @@
     if (e.target && e.target.dataset && e.target.dataset.sfxname) { e.stopPropagation(); addName(e.target); }
   }
 
-  /* ---------- Menü → Board-Einstellungen ---------- */
+  /* ---------- gemeinsames Speichern (wp_config des Standorts) ---------- */
+
+  async function saveCfg(patch) {
+    var site = ǀpd();
+    var res = await sb.from("wp_config").select("data").eq("site", site).maybeSingle();
+    if (res.error) throw res.error;
+    var data = (res.data && res.data.data) || {};
+    Object.keys(patch).forEach(function (k) { data[k] = patch[k]; });
+    var up = await sb.from("wp_config").upsert({ site: site, data: data, updated_at: new Date().toISOString(), updated_by: ǀ1bn });
+    if (up.error) throw up.error;
+    ǀ11i.cfg = data;
+    if (ǀ11i.draft) Object.keys(patch).forEach(function (k) { ǀ11i.draft[k] = JSON.parse(JSON.stringify(patch[k])); });
+    return data;
+  }
+
+  /* ---------- Board-Einstellungen: optionale Shopfloor-Reiter ---------- */
 
   function startMenuCard() {
     var busy = false;
@@ -251,22 +267,11 @@
       var b = e.target.closest && e.target.closest("#sfxNavSave");
       if (!b) return;
       e.preventDefault();
-      var hidden = [];
-      document.querySelectorAll("#sfxNavCard input[data-sfxnav]").forEach(function (c) { if (!c.checked) hidden.push(c.dataset.sfxnav); });
       var tabsHidden = [];
       document.querySelectorAll("#sfxNavCard input[data-sfxwt]").forEach(function (c) { if (!c.checked) tabsHidden.push(c.dataset.sfxwt); });
       b.disabled = true; b.textContent = "Speichert …";
       try {
-        var site = ǀpd();
-        var res = await sb.from("wp_config").select("data").eq("site", site).maybeSingle();
-        var data = (res.data && res.data.data) || {};
-        data.nav_hidden = hidden;
-        data.wp_tabs_hidden = tabsHidden;
-        var up = await sb.from("wp_config").upsert({ site: site, data: data, updated_at: new Date().toISOString(), updated_by: ǀ1bn });
-        if (up.error) throw up.error;
-        ǀ11i.cfg = data;
-        if (ǀ11i.draft) { ǀ11i.draft.nav_hidden = hidden.slice(); ǀ11i.draft.wp_tabs_hidden = tabsHidden.slice(); }
-        try { ǀ15f(); } catch (x) {}
+        await saveCfg({ wp_tabs_hidden: tabsHidden });
         if (typeof gbToast === "function") gbToast("Gespeichert");
       } catch (err) {
         if (typeof gbToast === "function") gbToast("Speichern fehlgeschlagen: " + (err && err.message || err), true);
@@ -279,22 +284,109 @@
     var allowed = false;
     try { allowed = ǀpe(); } catch (e) {}
     if (!allowed) return '<div id="sfxNavCard" hidden></div>';
-    var hidden = ((ǀ11i.cfg || {}).nav_hidden) || [];
-    var items = [];
-    try { items = ǀ15e().filter(function (x) { return x[0] !== "werkpuls"; }); } catch (e) {}
-    var site = "";
-    try { site = ǀpd(); } catch (e) {}
-    return '<section id="sfxNavCard" class="sfx-navcard"><h3>Menü dieses Standorts ' + esc(site) + "</h3>" +
-      "<p>Was im Menü sichtbar ist. Ausgeblendete Punkte verschwinden für alle Benutzer dieses Standorts, die Daten bleiben erhalten.</p>" +
-      '<div class="sfx-navs">' + items.map(function (x) {
-        var fixed = x[0] === "admin" || x[0] === "shopfloor";
-        return '<label><input type="checkbox" data-sfxnav="' + esc(x[0]) + '"' + (hidden.indexOf(x[0]) < 0 ? " checked" : "") + (fixed ? " disabled" : "") +
-          "><span>" + esc(x[1]) + "</span><small>" + esc(x[2]) + "</small></label>";
-      }).join("") + "</div>" +
-      "<h3>Shopfloor-Status: Reiter</h3><p>Leitstand, Melden und Einstellungen sind immer da. Diese Reiter bei Bedarf einschalten:</p>" +
+    return '<section id="sfxNavCard" class="sfx-navcard"><h3>Shopfloor-Status: Reiter</h3>' +
+      "<p>Leitstand, Melden und Einstellungen sind immer da. Diese Reiter bei Bedarf einschalten. (Das linke Menü passen Sie direkt im Menü unten mit „Menü anpassen“ an.)</p>" +
       '<div class="sfx-navs">' + OPT_TABS.map(function (x) {
         return '<label><input type="checkbox" data-sfxwt="' + x[0] + '"' + (hiddenTabs().indexOf(x[0]) < 0 ? " checked" : "") + "><span>" + esc(x[1]) + "</span></label>";
       }).join("") + '</div><button type="button" id="sfxNavSave">Speichern</button></section>';
+  }
+
+  /* ---------- Linkes Menü: aus- und einblenden ---------- */
+
+  var NEVER_HIDE = ["admin", "boardcfg"]; /* damit man sich nicht aussperrt */
+  var side = { edit: false, hidden: null, loaded: false };
+
+  function navEl() { return document.querySelector('nav.nav[aria-label="Hauptnavigation"]'); }
+  function isAdmin() { try { return ǀ1bk === "admin" || ǀ1bk === "leader"; } catch (e) { return false; } }
+
+  function applySide() {
+    var nav = navEl();
+    if (!nav) return;
+    var hid = side.hidden || ((ǀ11i.cfg || {}).nav_hidden) || [];
+    nav.classList.toggle("sfx-edit", side.edit);
+    var grp = null, grpVisible = false;
+    var closeGrp = function () { if (grp) grp.classList.toggle("sfx-hide", !side.edit && !grpVisible); };
+    Array.prototype.forEach.call(nav.children, function (el) {
+      if (el.classList.contains("nav-grp")) { closeGrp(); grp = el; grpVisible = false; return; }
+      var key = el.dataset && el.dataset.nav;
+      if (!key) return;
+      var off = hid.indexOf(key) >= 0 && NEVER_HIDE.indexOf(key) < 0;
+      el.classList.toggle("sfx-off", off);
+      el.classList.toggle("sfx-hide", off && !side.edit);
+      if (side.edit && NEVER_HIDE.indexOf(key) < 0 && !el.querySelector(".sfx-eye")) {
+        el.insertAdjacentHTML("beforeend", '<i class="sfx-eye" aria-hidden="true"></i>');
+      }
+      if (!side.edit) { var eye = el.querySelector(".sfx-eye"); if (eye) eye.remove(); }
+      if (!off && !el.hidden && getComputedStyle(el).display !== "none") grpVisible = true;
+    });
+    closeGrp();
+    var btn = document.getElementById("sfxSideBtn");
+    if (btn) btn.textContent = side.edit ? "Fertig – speichern" : "Menü anpassen";
+  }
+
+  async function loadSide() {
+    if (side.loaded) return;
+    try {
+      if (!(ǀ11i.cfg && Object.keys(ǀ11i.cfg).length)) {
+        var r = await sb.from("wp_config").select("data").eq("site", ǀpd()).maybeSingle();
+        if (r.data && r.data.data) ǀ11i.cfg = r.data.data;
+      }
+      side.loaded = true;
+    } catch (e) {}
+    applySide();
+  }
+
+  function startSideMenu() {
+    var nav = navEl();
+    if (!nav) return;
+    var mo = new MutationObserver(function () { mo.disconnect(); applySide(); mo.observe(nav, { attributes: true, subtree: true, attributeFilter: ["hidden", "class"] }); });
+    mo.observe(nav, { attributes: true, subtree: true, attributeFilter: ["hidden", "class"] });
+
+    var tries = 0;
+    (function addBtn() {
+      if (document.getElementById("sfxSideBtn")) return;
+      if (!isAdmin()) { if (++tries < 120) setTimeout(addBtn, 1000); return; } /* Rolle steht erst nach dem Anmelden fest */
+      nav.insertAdjacentHTML("afterend", '<button type="button" id="sfxSideBtn" class="sfx-sidebtn">Menü anpassen</button>' +
+        '<p id="sfxSideHint" class="sfx-sidehint" hidden>Punkt antippen = ein- oder ausblenden. Gilt für alle Benutzer dieses Standorts, die Daten bleiben erhalten.</p>');
+      side.loaded = false; loadSide();
+    })();
+
+    document.addEventListener("click", async function (e) {
+      var btn = e.target.closest && e.target.closest("#sfxSideBtn");
+      if (btn) {
+        e.preventDefault();
+        if (!side.edit) {
+          side.hidden = (((ǀ11i.cfg || {}).nav_hidden) || []).slice();
+          side.edit = true;
+        } else {
+          btn.disabled = true; btn.textContent = "Speichert …";
+          try {
+            await saveCfg({ nav_hidden: side.hidden });
+            if (typeof gbToast === "function") gbToast("Menü gespeichert");
+            side.edit = false;
+          } catch (err) {
+            if (typeof gbToast === "function") gbToast("Speichern fehlgeschlagen: " + (err && err.message || err), true);
+          }
+          btn.disabled = false;
+        }
+        var hint = document.getElementById("sfxSideHint");
+        if (hint) hint.hidden = !side.edit;
+        applySide();
+        return;
+      }
+      if (!side.edit) return;
+      var item = e.target.closest && e.target.closest('nav.nav[aria-label="Hauptnavigation"] [data-nav]');
+      if (!item) return;
+      e.preventDefault(); e.stopPropagation();
+      var key = item.dataset.nav;
+      if (NEVER_HIDE.indexOf(key) >= 0) return;
+      var i = side.hidden.indexOf(key);
+      if (i >= 0) side.hidden.splice(i, 1); else side.hidden.push(key);
+      applySide();
+    }, true);
+
+    loadSide();
+    setTimeout(function () { side.loaded = false; loadSide(); }, 4000); /* nach dem Laden der App noch einmal */
   }
 
   function injectCss() {
@@ -313,6 +405,12 @@
       "@media(max-width:900px){.sfx-row{grid-template-columns:1fr;padding-left:calc(12px + var(--sfx-d)*10px)}}" +
       ".sfx-navcard{margin-top:18px;padding:16px;border:1px solid #dde3ea;border-radius:12px}.sfx-navcard h3{margin:0 0 4px}.sfx-navcard p{margin:0 0 10px;color:#64748b;font-size:13px}" +
       ".sfx-navs{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:6px 14px;margin-bottom:12px}" +
+      "nav.nav .sfx-hide{display:none!important}" +
+      "nav.sfx-edit [data-nav]{position:relative}nav.sfx-edit .sfx-off{opacity:.45;text-decoration:line-through}" +
+      "nav.sfx-edit [data-nav] .sfx-eye{position:absolute;right:10px;top:50%;width:9px;height:9px;margin-top:-5px;border-radius:50%;background:#3cae49}" +
+      "nav.sfx-edit .sfx-off .sfx-eye{background:transparent;border:1.5px solid #94a3b8}" +
+      ".sfx-sidebtn{display:block;margin:10px 14px 0;width:calc(100% - 28px);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;font-size:13px;cursor:pointer}" +
+      ".sfx-sidebtn:hover{background:rgba(255,255,255,.08)}.sfx-sidehint{margin:6px 14px 0;font-size:11.5px;opacity:.75;line-height:1.35}" +
       ".sfx-navs label{display:flex;gap:8px;align-items:baseline;font-size:13.5px}.sfx-navs small{color:#94a3b8;font-size:11px}";
     var s = document.createElement("style");
     s.textContent = css;
