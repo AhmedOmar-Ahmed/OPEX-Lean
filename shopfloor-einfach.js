@@ -97,6 +97,7 @@
     startMenuCard();
     startSideMenu();
     startTour();
+    startLegend();
     window.addEventListener("hashchange", syncTour);
     syncTour();
     injectCss();
@@ -193,6 +194,41 @@
     if (!on && btn) btn.remove();
     /* weißer Seitenkopf auf den Shopfloor-Seiten: doppelt, daher weg */
     document.body.classList.toggle("sfx-sfpage", /^#\/(shopfloor|werkpuls)/.test(location.hash));
+  }
+
+  /* ---------- Legende in die Kopfleiste (Zähler) verschieben ---------- */
+
+  function startLegend() {
+    var queued = false;
+    var run = function () {
+      queued = false;
+      var cnt = document.querySelector(".sf-hd .sf-cnt");
+      var leg = document.querySelector(".sf-leg");
+      if (!cnt || !leg || cnt.dataset.sfx) return;
+      cnt.dataset.sfx = "1";
+      var items = Array.prototype.filter.call(leg.children, function (el) { return el.tagName === "DIV"; }).map(function (el) {
+        var t = el.querySelector("b");
+        var title = t ? t.textContent.trim() : "";
+        var desc = el.textContent.replace(title, "").trim();
+        return { title: title, desc: desc, color: el.style.getPropertyValue("--c") };
+      });
+      var spans = Array.prototype.slice.call(cnt.children);
+      spans.forEach(function (sp, i) {
+        if (!items[i]) return;
+        sp.classList.add("sfx-c");
+        sp.insertAdjacentHTML("beforeend", "<small>" + esc(items[i].desc) + "</small>");
+      });
+      items.slice(spans.length).forEach(function (it) {
+        var label = it.title.charAt(0) + it.title.slice(1).toLowerCase();
+        cnt.insertAdjacentHTML("beforeend", '<span class="sfx-c sfx-x"><i style="background:' + esc(it.color) + '"></i><b>' + esc(label) + "</b><small>" + esc(it.desc) + "</small></span>");
+      });
+    };
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(run);
+    }).observe(document.body, { childList: true, subtree: true });
+    run();
   }
 
   /* ---------- Reiter ---------- */
@@ -487,6 +523,10 @@
       ".sfx-sidebtn{display:block;margin:10px 14px 0;width:calc(100% - 28px);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;font-size:13px;cursor:pointer}" +
       ".sfx-sidebtn:hover{background:rgba(255,255,255,.08)}.sfx-sidehint{margin:6px 14px 0;font-size:11.5px;opacity:.75;line-height:1.35}" +
       "body.sfx-sfpage .pagehead{display:none!important}" +
+      ".sf-leg{display:none!important}" +
+      ".sf-cnt span.sfx-c{display:grid;grid-template-columns:auto auto 1fr;column-gap:7px;row-gap:1px;align-items:center}" +
+      ".sf-cnt span.sfx-c small{grid-column:1/-1;font-size:11px;opacity:.78;white-space:nowrap}" +
+      ".sf-cnt span.sfx-x b{font-size:13px}" +
       "body.sfx-tour .wp-sftop,body.sfx-tour .sf-bar,body.sfx-tour .sf-leg,body.sfx-tour .sf-foot,body.sfx-tour .sf-hd p,body.sfx-tour .pagehead,body.sfx-tour #wpToasts{display:none!important}" +
       "body.sfx-tour .sf-hd{padding-top:8px;padding-bottom:8px}body.sfx-tour #sfOut{overflow:hidden!important}body.sfx-tour #sfSize{margin:0 auto}" +
       "body.sfx-tour .wp-popw{margin-bottom:6px}body.sfx-tour .wp-pop{padding:8px 12px}body.sfx-tour .wp-poph b{font-size:18px}" +
