@@ -18,7 +18,8 @@
     try {
       return typeof ǀ158 === "function" && typeof ǀ131 === "function" && typeof ǀ11i === "object" &&
         typeof ǀ157 === "function" && typeof ǀ14u === "function" && typeof esc === "function" &&
-        typeof ǀ13q === "function" && typeof ǀqb === "function";
+        typeof ǀ13q === "function" && typeof ǀqb === "function" &&
+        typeof ǀqg === "function" && typeof ǀ13w === "function" && typeof ǀ13v === "function";
     } catch (e) { return false; }
   }
 
@@ -95,6 +96,9 @@
     document.addEventListener("change", onChange, true);
     startMenuCard();
     startSideMenu();
+    startTour();
+    window.addEventListener("hashchange", syncTour);
+    syncTour();
     injectCss();
 
     /* falls die Einstellungen gerade offen sind: neu zeichnen */
@@ -118,6 +122,77 @@
     });
     var out = document.getElementById("sfOut");
     if (out) ǀqd.observe(out);
+  }
+
+  /* ---------- Abspielen: alle Abteilungen, ganzer Bildschirm ---------- */
+
+  function startTour() {
+    /* alle Abteilungen der Reihe nach, nicht nur die mit Problemen */
+    ǀ13v = function () {
+      var top = ǀph();
+      var only = (typeof ǀ13f === "function") ? ǀ13f() : null;
+      var deps = only || ǀ123(top.id).filter(function (a) { return a.level === 3 && ǀ126(a).length; });
+      return (only ? [] : [""]).concat(deps.map(function (a) { return a.id; }));
+    };
+
+    /* Board in der Höhe UND Breite einpassen, solange abgespielt wird */
+    var origFit = ǀqb;
+    ǀqb = function () {
+      var r = origFit.apply(this, arguments);
+      try { if (ǀ11i.tour) fitHeight(); } catch (e) {}
+      return r;
+    };
+
+    var origFocus = ǀqg;
+    ǀqg = function () {
+      var r = origFocus.apply(this, arguments);
+      if (ǀ11i.tour) { setTimeout(refit, 80); setTimeout(refit, 700); }
+      return r;
+    };
+
+    var origTour = ǀ13w;
+    ǀ13w = function (on) {
+      var r = origTour.apply(this, arguments);
+      syncTour();
+      setTimeout(refit, 300);
+      return r;
+    };
+
+    setInterval(syncTour, 1000);
+    window.addEventListener("resize", function () { if (ǀ11i.tour) setTimeout(refit, 150); });
+    document.addEventListener("fullscreenchange", function () { setTimeout(refit, 250); });
+
+    document.addEventListener("click", function (e) {
+      if (e.target.closest && e.target.closest("#sfxTourStop")) { e.preventDefault(); try { ǀ13w(false); } catch (x) {} }
+    });
+  }
+
+  function refit() { try { if (ǀ11i.tour && /^#\/shopfloor/.test(location.hash)) { ǀp4.fit = true; ǀqb(); } } catch (e) {} }
+
+  function fitHeight() {
+    var out = document.getElementById("sfOut"), inner = document.getElementById("sfIn"), size = document.getElementById("sfSize");
+    if (!out || !inner || !size) return;
+    var avail = window.innerHeight - out.getBoundingClientRect().top - 10;
+    var h = inner.offsetHeight, w = inner.offsetWidth;
+    if (!h || avail < 120) return;
+    var z = Math.min(ǀp4.zoom || 1, avail / h);
+    z = Math.max(0.15, z);
+    ǀp4.zoom = z;
+    inner.style.transform = z === 1 ? "none" : "scale(" + z + ")";
+    size.style.width = Math.ceil(w * z) + "px";
+    size.style.height = Math.ceil(h * z) + "px";
+    var zv = document.getElementById("sfZv"); if (zv) zv.textContent = Math.round(z * 100) + " %";
+  }
+
+  function syncTour() {
+    var on = false;
+    try { on = !!ǀ11i.tour && ǀ13h(); } catch (e) {}
+    document.body.classList.toggle("sfx-tour", on);
+    var btn = document.getElementById("sfxTourStop");
+    if (on && !btn) document.body.insertAdjacentHTML("beforeend", '<button type="button" id="sfxTourStop">■ Stopp</button>');
+    if (!on && btn) btn.remove();
+    /* weißer Seitenkopf auf den Shopfloor-Seiten: doppelt, daher weg */
+    document.body.classList.toggle("sfx-sfpage", /^#\/(shopfloor|werkpuls)/.test(location.hash));
   }
 
   /* ---------- Reiter ---------- */
@@ -411,6 +486,14 @@
       "nav.sfx-edit .sfx-off .sfx-eye{background:transparent;border:1.5px solid #94a3b8}" +
       ".sfx-sidebtn{display:block;margin:10px 14px 0;width:calc(100% - 28px);padding:7px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;font-size:13px;cursor:pointer}" +
       ".sfx-sidebtn:hover{background:rgba(255,255,255,.08)}.sfx-sidehint{margin:6px 14px 0;font-size:11.5px;opacity:.75;line-height:1.35}" +
+      "body.sfx-sfpage .pagehead{display:none!important}" +
+      "body.sfx-tour .wp-sftop,body.sfx-tour .sf-bar,body.sfx-tour .sf-leg,body.sfx-tour .sf-foot,body.sfx-tour .sf-hd p,body.sfx-tour .pagehead,body.sfx-tour #wpToasts{display:none!important}" +
+      "body.sfx-tour .sf-hd{padding-top:8px;padding-bottom:8px}body.sfx-tour #sfOut{overflow:hidden!important}body.sfx-tour #sfSize{margin:0 auto}" +
+      "body.sfx-tour .wp-popw{margin-bottom:6px}body.sfx-tour .wp-pop{padding:8px 12px}body.sfx-tour .wp-poph b{font-size:18px}" +
+      "body.sfx-tour .wp-popg{grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px;margin-top:6px}" +
+      "body.sfx-tour .wp-popc{padding:6px 9px}body.sfx-tour .wp-popc small{display:none}body.sfx-tour .wp-popc b{font-size:14px}body.sfx-tour .wp-popc span{font-size:12.5px}" +
+      "body.sfx-tour .wp-popc:nth-child(n+5):not(.more){display:none}" +
+      "#sfxTourStop{position:fixed;right:14px;bottom:14px;z-index:99999;padding:8px 14px;border-radius:999px;border:0;background:#0a2e50;color:#fff;font-weight:600;cursor:pointer;opacity:.55}#sfxTourStop:hover{opacity:1}" +
       ".sfx-navs label{display:flex;gap:8px;align-items:baseline;font-size:13.5px}.sfx-navs small{color:#94a3b8;font-size:11px}";
     var s = document.createElement("style");
     s.textContent = css;
