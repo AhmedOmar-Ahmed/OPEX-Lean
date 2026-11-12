@@ -98,6 +98,7 @@
     startSideMenu();
     startTour();
     startLegend();
+    startLogo();
     window.addEventListener("hashchange", syncTour);
     syncTour();
     injectCss();
@@ -221,6 +222,35 @@
       items.slice(spans.length).forEach(function (it) {
         var label = it.title.charAt(0) + it.title.slice(1).toLowerCase();
         cnt.insertAdjacentHTML("beforeend", '<span class="sfx-c sfx-x"><i style="background:' + esc(it.color) + '"></i><b>' + esc(label) + "</b><small>" + esc(it.desc) + "</small></span>");
+      });
+    };
+    new MutationObserver(function () {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(run);
+    }).observe(document.body, { childList: true, subtree: true });
+    run();
+  }
+
+  /* ---------- Bischof+Klein-Logo überall gut sichtbar ---------- */
+
+  var LOGO_SPOTS = [
+    { sel: "#topbar", cls: "sfx-bk-top", where: "afterbegin" },            /* Kopfzeile jeder Seite (hell) */
+    { sel: ".wp .wp-hd", cls: "sfx-bk-dark sfx-bk-wp", where: "afterbegin" }, /* dunkle Shopfloor-Leiste */
+    { sel: ".sf-hd", cls: "sfx-bk-dark sfx-bk-sf", where: "afterbegin" },     /* Leitstand-Kopf, auch beim Abspielen */
+    { sel: ".bc-hd", cls: "sfx-bk-bc", where: "afterbegin" }                 /* Board-Einstellungen */
+  ];
+
+  function startLogo() {
+    if (typeof ǀ11f !== "function") return;
+    var queued = false;
+    var run = function () {
+      queued = false;
+      LOGO_SPOTS.forEach(function (spot) {
+        document.querySelectorAll(spot.sel).forEach(function (el) {
+          if (el.querySelector(":scope > .sfx-bk")) return;
+          el.insertAdjacentHTML(spot.where, ǀ11f("sfx-bk " + spot.cls));
+        });
       });
     };
     new MutationObserver(function () {
@@ -524,6 +554,13 @@
       ".sfx-sidebtn:hover{background:rgba(255,255,255,.08)}.sfx-sidehint{margin:6px 14px 0;font-size:11.5px;opacity:.75;line-height:1.35}" +
       "body.sfx-sfpage .pagehead{display:none!important}" +
       ".sf-leg{display:none!important}" +
+      ".bk-logo.sfx-bk{height:34px}.bk-logo.sfx-bk-top{height:32px;margin:0 14px 0 4px;padding-right:14px;border-right:1px solid var(--line,#DCE4EC)}" +
+      "#topbar{align-items:center}" +
+      ".bk-logo.sfx-bk-dark .bk-l{display:none!important}.bk-logo.sfx-bk-dark .bk-d{display:block!important}" +
+      ".bk-logo.sfx-bk-wp{height:36px;margin-right:16px;align-self:center}.wp-hd{align-items:center}" +
+      ".bk-logo.sfx-bk-sf{height:46px;margin-right:6px;align-self:center}body.sfx-tour .bk-logo.sfx-bk-sf{height:54px}" +
+      ".bk-logo.sfx-bk-bc{height:34px;margin-right:16px;align-self:center}" +
+      ".bk-logo.bk-side{height:34px!important}" +
       ".sf-cnt span.sfx-c{display:grid;grid-template-columns:auto auto 1fr;column-gap:7px;row-gap:1px;align-items:center}" +
       ".sf-cnt span.sfx-c small{grid-column:1/-1;font-size:11px;opacity:.78;white-space:nowrap}" +
       ".sf-cnt span.sfx-x b{font-size:13px}" +
