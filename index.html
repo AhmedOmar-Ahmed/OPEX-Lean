@@ -25,16 +25,21 @@
     var list = [].slice.call(document.querySelectorAll('script[type="text/x-kpi"]'));
     list.forEach(function (o) { var x = document.createElement("script"); x.text = o.text; o.parentNode.replaceChild(x, o); });
     /* Ereignisse nachholen, die vor dem Start schon vorbei waren */
-    if (document.readyState === "complete") setTimeout(function () { window.dispatchEvent(new Event("load")); }, 0);
+    if (document.readyState === "complete") setTimeout(fireLoad, 0);
+    else setTimeout(function () { if (document.readyState !== "complete") fireLoad(); }, 4000);
   }
+  /* wie früher: normales <script src> (funktioniert im Firmennetz/Proxy); hängt eine Quelle, nach Zeitlimit die nächste */
+  var synth = false;
+  window.addEventListener("load", function (ev) { if (synth && !ev.__kpi) ev.stopImmediatePropagation(); }, true);
+  function fireLoad() { if (synth) return; synth = true; var e = new Event("load"); e.__kpi = 1; window.dispatchEvent(e); }
   function tryLoad(i) {
     if (window.supabase) { libOk = true; return run(); }
     if (i >= SRC.length) { var w = function () { fail(); }; if (domOk) w(); else document.addEventListener("DOMContentLoaded", w); return; }
-    var ac = window.AbortController ? new AbortController() : null, done = false;
-    var t = setTimeout(function () { if (done) return; done = true; try { ac && ac.abort(); } catch (e) {} console.warn("Bibliothek: Zeitüberschreitung", SRC[i]); tryLoad(i + 1); }, i ? 9000 : 7000);
-    fetch(SRC[i], ac ? { signal: ac.signal, mode: "cors", credentials: "omit" } : {}).then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.text(); })
-      .then(function (code) { if (done) return; done = true; clearTimeout(t); inline(code); if (!window.supabase) throw new Error("leer"); libOk = true; run(); })
-      .catch(function (e) { if (done && !libOk && e && e.name === "AbortError") return; if (!done) { done = true; clearTimeout(t); } if (!libOk) { console.warn("Bibliothek nicht geladen", SRC[i], e); tryLoad(i + 1); } });
+    var done = false, x = document.createElement("script");
+    var next = function (why) { if (done) return; done = true; clearTimeout(t); if (window.supabase) { libOk = true; run(); return; } console.warn("Bibliothek nicht geladen", SRC[i], why); tryLoad(i + 1); };
+    var t = setTimeout(function () { next("Zeitüberschreitung"); }, i ? 10000 : 12000);
+    x.onload = function () { next("leer"); }; x.onerror = function () { next("Fehler"); };
+    x.src = SRC[i]; document.head.appendChild(x);
   }
   if (document.readyState !== "loading") domOk = true;
   else document.addEventListener("DOMContentLoaded", function () { domOk = true; run(); });
